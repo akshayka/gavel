@@ -62,6 +62,7 @@ class MaxMinFairnessPolicyWithPerf(Policy):
                                        1.0 / proportional_throughputs.reshape((m, 1)))
 
         x = cp.Variable(throughputs.shape)
+        print(x.shape)
         # Multiply throughputs by scale_factors to ensure that scale_factor
         # is taken into account while allocating times to different jobs.
         # A job run on 1 GPU should receive `scale_factor` more time than
@@ -143,6 +144,7 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
 
         # Allocation matrix.
         x = cp.Variable((n, num_vars_per_job * m))
+        print(x.shape)
 
         constraints = [
             # All allocation values must be >= 0.
@@ -281,6 +283,7 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
         (m, n) = all_throughputs[0].shape
         (job_ids, single_job_ids, worker_types, relevant_combinations) = index
         x = cp.Variable((m, n))
+        print(x.shape)
 
         # Row i of scale_factors_array is the scale_factor of job
         # combination i repeated len(worker_types) times.
@@ -302,23 +305,36 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
         # is taken into account while allocating times to different jobs.
         # A job run on 1 GPU should receive `scale_factor` more time than
         # a job run on `scale_factor` GPUs.
+        import scipy.sparse as sp
+        idx = []
+        tputs = []
         for i in range(len(all_throughputs)):
             indexes = relevant_combinations[single_job_ids[i]]
+            idx += indexes
             proportional_throughput = proportional_throughputs[i]
-            objective_terms.append(cp.sum(cp.multiply(
-                np.multiply(all_throughputs[i][indexes],
-                            scale_factors_array[indexes]), x[indexes])) /
-                proportional_throughput
-            )
-        if len(objective_terms) == 1:
-            objective = cp.Maximize(objective_terms[0])
-        else:
-            objective = cp.Maximize(cp.minimum(*objective_terms))
+            curr_throughputs = np.multiply(
+                    all_throughputs[i][indexes],
+                    scale_factors_array[indexes]) / proportional_throughput
+            tputs.append(curr_throughputs)
+        tputs = sp.csc_matrix(np.vstack(tputs))
+        indexed_vars = x[idx]
+        realized_tputs = cp.multiply(tputs, indexed_vars)
+        realized_tputs_vec = cp.reshape(realized_tputs,
+                (len(all_throughputs),
+                int(np.prod(realized_tputs.shape) / len(all_throughputs))),
+                order='C')
+        print('tputs ', tputs.shape)
+        print('indexed vars ', indexed_vars.shape)
+        print('reshaped tputs ', realized_tputs_vec.shape)
+        objective_fn = cp.min(cp.sum(realized_tputs_vec, axis=1))
+
+        print(len(all_throughputs))
+        objective = cp.Maximize(objective_fn)
 
         # Make sure the allocation can fit in the cluster.
         constraints = self.get_base_constraints(x, single_job_ids,
-                                                scale_factors_array,
-                                                relevant_combinations)
+                                               scale_factors_array,
+                                               relevant_combinations)
 
         # Explicitly constrain all allocation values with an effective scale
         # factor of 0 to be 0.
@@ -329,8 +345,26 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
             for j in range(n):
                 if scale_factors_array[i,j] == 0:
                     constraints.append(x[i,j] == 0)
+        print(len(constraints))
         cvxprob = cp.Problem(objective, constraints)
-        result = cvxprob.solve(solver=self._solver)
+        if self._solver == 'SCS':
+            kwargs = {'acceleration_lookback': 0, 'max_iters': 10}
+        else:
+            kwargs = {}
+
+        #import cProfile
+        #prof = cProfile.Profile()
+        #prof.enable()
+        import time
+        start = time.time()
+        import yep
+        yep.start('stuff.prof')
+        result = cvxprob.solve(solver=self._solver, verbose=True, **kwargs)
+        yep.stop()
+        end = time.time()
+        #prof.disable()
+        #prof.dump_stats('canon.pf')
+        print('TOTAL TIME ', end - start)
 
         if cvxprob.status != "optimal":
             print('WARNING: Allocation returned by policy not optimal!')
