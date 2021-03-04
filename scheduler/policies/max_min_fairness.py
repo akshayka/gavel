@@ -311,11 +311,12 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
         for i in range(len(all_throughputs)):
             indexes = relevant_combinations[single_job_ids[i]]
             idx += indexes
-            proportional_throughput = proportional_throughputs[i]
+            proportional_throughput = float(proportional_throughputs[i])
             curr_throughputs = np.multiply(
                     all_throughputs[i][indexes],
-                    scale_factors_array[indexes]) / proportional_throughput
+                    scale_factors_array[indexes])
             tputs.append(curr_throughputs)
+
         tputs = sp.csc_matrix(np.vstack(tputs))
         indexed_vars = x[idx]
         realized_tputs = cp.multiply(tputs, indexed_vars)
@@ -323,12 +324,15 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
                 (len(all_throughputs),
                 int(np.prod(realized_tputs.shape) / len(all_throughputs))),
                 order='C')
+
+        print(len(all_throughputs))
         print('tputs ', tputs.shape)
         print('indexed vars ', indexed_vars.shape)
         print('reshaped tputs ', realized_tputs_vec.shape)
-        objective_fn = cp.min(cp.sum(realized_tputs_vec, axis=1))
 
-        print(len(all_throughputs))
+        objective_fn = cp.min(cp.sum(realized_tputs_vec, axis=1) /
+                proportional_throughputs.reshape((256,)))
+
         objective = cp.Maximize(objective_fn)
 
         # Make sure the allocation can fit in the cluster.
@@ -366,6 +370,7 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
         #prof.dump_stats('canon.pf')
         print('TOTAL TIME ', end - start)
 
+        print('VALUE ', cvxprob.value)
         if cvxprob.status != "optimal":
             print('WARNING: Allocation returned by policy not optimal!')
 
