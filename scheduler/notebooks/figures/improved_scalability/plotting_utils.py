@@ -109,7 +109,7 @@ def plot_runtime_vs_effective_throughput_ratios(runtimes, all_effective_throughp
     ax.set_xlabel("Runtime (seconds)")
     sns.despine()
     
-    ax.set_xscale('log')
+    #ax.set_xscale('log')
     ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
     xmin, xmax = plt.xlim()
     ymin, ymax = plt.ylim()

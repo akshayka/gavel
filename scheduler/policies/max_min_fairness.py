@@ -283,7 +283,6 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
         (m, n) = all_throughputs[0].shape
         (job_ids, single_job_ids, worker_types, relevant_combinations) = index
         x = cp.Variable((m, n))
-        print(x.shape)
 
         # Row i of scale_factors_array is the scale_factor of job
         # combination i repeated len(worker_types) times.
@@ -325,11 +324,6 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
                 int(np.prod(realized_tputs.shape) / len(all_throughputs))),
                 order='C')
 
-        print(len(all_throughputs))
-        print('tputs ', tputs.shape)
-        print('indexed vars ', indexed_vars.shape)
-        print('reshaped tputs ', realized_tputs_vec.shape)
-
         objective_fn = cp.min(cp.sum(realized_tputs_vec, axis=1))
 
         objective = cp.Maximize(objective_fn)
@@ -348,30 +342,16 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
             for j in range(n):
                 if scale_factors_array[i,j] == 0:
                     constraints.append(x[i,j] == 0)
-        print(len(constraints))
         cvxprob = cp.Problem(objective, constraints)
         if self._solver == 'SCS':
             kwargs = {'acceleration_lookback': 0, 'max_iters': 10}
         else:
             kwargs = {}
 
-        #import cProfile
-        #prof = cProfile.Profile()
-        #prof.enable()
-        import time
-        start = time.time()
-        import yep
-        yep.start('stuff.prof')
         result = cvxprob.solve(solver=self._solver, verbose=True, **kwargs)
-        yep.stop()
-        end = time.time()
-        #prof.disable()
-        #prof.dump_stats('canon.pf')
-        print('TOTAL TIME ', end - start)
 
-        print('VALUE ', cvxprob.value)
-        x.value = np.ones(x.shape)
-        print('@ ones ', objective_fn.value)
+        #r = cp.sum(cp.multiply( scale_factors_array, x), axis=0)
+        #print('R: ', r.value)
         if cvxprob.status != "optimal":
             print('WARNING: Allocation returned by policy not optimal!')
 
