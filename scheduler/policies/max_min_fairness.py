@@ -350,7 +350,9 @@ class MaxMinFairnessPolicyWithPacking(PolicyWithPacking):
         else:
             kwargs = {}
 
-        result = cvxprob.solve(solver=self._solver, **kwargs)
+        result = cvxprob.solve(solver=self._solver, verbose=True, **kwargs)
+        print('solve time ', cvxprob._solve_time)
+
 
         if cvxprob.status != "optimal":
             print('WARNING: Allocation returned by policy not optimal!')
